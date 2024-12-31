@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mantra MFS100 SDK By Vikash</title>
+    <script src="jquery-1.8.2.js" type="text/javascript"></script>
+    <script src="testSDKMFS100ByVikash.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="./vstyles.css"/>
+</head>
+<body>
+    <div class="container">
+        <!-- Add input fields for attendance ID and name -->
+        <div style="text-align: center; margin-top: 20px;">
+            <label for="attendanceId">Attendance ID:</label>
+            <input type="text" id="attendanceId" maxlength="8" required>
+            <label for="name">Name:</label>
+            <input type="text" id="name" required>
+        </div>
+        <br><br>
+        <!-- Other fingerprint boxes remain the same -->
+        <div class="fingerbox">
+            <img id="fingerImg1" class="capturedImg" src="scanning.gif"/>
+            <br>
+            <button class="btnReadThumbs" id="finger1" onclick='capture("#fingerImg1");'>Capture Finger1</button>
+        </div>
+        <div class="fingerbox">
+            <img id="fingerImg2" class="capturedImg" src="data:image/jpeg;base64,..."/>
+            <br>
+            <button class="btnReadThumbs" id="finger2" onclick='capture("#fingerImg2");'>Capture Finger2</button>
+        </div>
+        <div class="fingerbox">
+            <img id="fingerImg3" class="capturedImg" src="data:image/jpeg;base64,..."/>
+            <br>
+            <button class="btnReadThumbs" id="finger3" onclick='capture("#fingerImg3");'>Capture Finger3</button>
+        </div>
+        <div class="fingerbox">
+            <img id="fingerImg4" class="capturedImg" src="data:image/jpeg;base64,..."/>
+            <br>
+            <button class="btnReadThumbs" id="finger4" onclick='capture("#fingerImg4");'>Capture Finger4</button>
+        </div>
+        
+        <!-- Add Save to PDF button -->
+        <div style="text-align: center; margin-top: 20px;">
+            <button class="btnReadThumbs" onclick="generatePDF()">Save as PDF</button>
+        </div>
+    </div>
+
+    <div>
+        <img src="scanning.gif" id="progress" style="display: none;"/>
+    </div>
+
+    <script>
+    // Helper function to optimize image
+    function optimizeImage(imgSrc) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            // Reduced dimensions back to basic size
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Basic image drawing without smoothing
+            ctx.imageSmoothingEnabled = false;
+            
+            // Draw original image
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Very basic processing
+            for (let i = 0; i < data.length; i += 4) {
+                // Simple grayscale
+                const gray = data[i];  // Just use red channel for grayscale
+                
+                // Simple invert
+                const value = 255 - gray;
+                
+                // Set all channels to the same value
+                data[i] = value;     // R
+                data[i + 1] = value; // G
+                data[i + 2] = value; // B
+                // Alpha remains unchanged
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Basic quality output
+            const optimizedImage = canvas.toDataURL('image/jpeg', 0.8);
+            resolve(optimizedImage);
+        };
+        img.src = imgSrc;
+    });
+}
+
+// Simplified capture function
+function capture(fingerImgToDisplay) {
+    $(fingerImgToDisplay).show();
+    $(fingerImgToDisplay).attr("src", "./scanning.gif");
+
+    setTimeout(function(){
+        var quality = 60; // Reduced quality
+        var timeout = 10;
+        var res = CaptureFinger(quality, timeout);
+
+        $(fingerImgToDisplay).show();
+        $('#progress').hide();
+        $(fingerImgToDisplay).attr("src", "data:image/bmp;base64," + res.data.BitmapData);
+    }, 1000);
+}
+
+// Add basic CSS for image display
+const style = document.createElement('style');
+style.textContent = `
+    .capturedImg {
+        max-width: 200px;
+        height: auto;
+        border: 1px solid #ccc;
+    }
+    
+    .fingerbox {
+        display: inline-block;
+        margin: 10px;
+        padding: 5px;
+    }
+`;
+document.head.appendChild(style);
+
+    async function generatePDF() {
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+            });
+
+            const attendanceId = document.getElementById('attendanceId').value;
+            const name = document.getElementById('name').value;
+
+            if (!attendanceId || attendanceId.length !== 8) {
+                alert('Please enter a valid 8-digit attendance ID.');
+                return;
+            }
+
+            if (!name) {
+                alert('Please enter a name.');
+                return;
+            }
+
+            const fingerprints = document.querySelectorAll('.capturedImg');
+            let yOffset = 20;
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text('Fingerprint Capture Report', 105, 15, { align: 'center' });
+
+            doc.setProperties({
+                title: 'Fingerprint Capture Report',
+                subject: 'Fingerprint Scans',
+                creator: 'MFS100 System'
+            });
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Attendance ID: ${attendanceId}`, 20, yOffset);
+            yOffset += 10;
+            doc.text(`Name: ${name}`, 20, yOffset);
+            yOffset += 20;
+
+            for (let i = 0; i < fingerprints.length; i++) {
+                const img = fingerprints[i];
+                if (img.src && !img.src.includes('scanning.gif')) {
+                    const optimizedImage = await optimizeImage(img.src);
+                    doc.text(`Fingerprint ${i + 1}`, 20, yOffset);
+                    try {
+                        doc.addImage(
+                            optimizedImage,
+                            'JPEG',
+                            20,
+                            yOffset + 5,
+                            30, // Smaller width
+                            40, // Smaller height
+                            `fp${i}`,
+                            'MEDIUM'
+                        );
+                    } catch (error) {
+                        console.error('Error adding image:', error);
+                        continue;
+                    }
+                    yOffset += 50; // Adjust for smaller images
+                    if (yOffset > 250) {
+                        doc.addPage();
+                        yOffset = 20;
+                    }
+                }
+            }
+
+            doc.setFontSize(8);
+            doc.setTextColor(128, 128, 128);
+            const timestamp = new Date().toLocaleString();
+            doc.text(`Generated on: ${timestamp}`, 20, 285);
+
+            doc.save(`${name}_${new Date().toISOString().slice(0,10)}.pdf`);
+
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Error generating PDF. Please try again.');
+        }
+    }
+    </script>
+</body>
+</html>
